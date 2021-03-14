@@ -1,0 +1,249 @@
+---
+title: "STA 302 Final Project"
+author: "Peiyu Li, 1004975627"
+date: "6/14/2020"
+output: html_document
+---
+##Introduction
+#Split the data into training and testing data set
+```{r}
+set.seed(1004975627)
+dataset <- read.csv("FP_dataset.csv",header = TRUE)
+dataset1<- dataset[,c(5:31)]
+sample <- sample.int(n = nrow(dataset1), size = floor(.5*nrow(dataset1)), replace = F)
+train <- dataset1[sample, ]
+test  <- dataset1[-sample, ]
+str(train)
+```
+
+#Summary of data
+```{r}
+numeric <- train[,c(1,9:27)]
+dummy <- train[,c(2:8)]
+apply(numeric[,],2,mean)
+apply(numeric[,],2,sd)
+prop.table(table(train$CONTROL))
+prop.table(table(train$REGION))
+prop.table(table(train$HBCU))
+prop.table(table(train$PBI))
+prop.table(table(train$TRIBAL))
+prop.table(table(train$HSI))
+prop.table(table(train$WOMENONLY))
+
+```
+
+```{r}
+boxplot(train$PCT_WHITE,train$PCT_BLACK,train$PCT_ASIAN,train$PCT_HISPANIC,train$PCT_BA,train$PCT_BORN_US,train$POVERTY_RATE,train$PCT_GRAD_PROF,main="boxplot for numerical predictors measuring rate and percentage",names=c("PCT_WHITE","PCT_BLACK","PCT_ASIAN","PCT_HISPANIC","PCT_BA","PCT_BORN_US","POVERTY_RATE","PCT_GRAD_PROF"))
+
+boxplot(train$PFTFAC,train$PCTPELL,train$UG25ABV,train$INC_PCT_LO,train$PAR_ED_PCT_1STGEN,train$FEMALE,train$UNEMP_RATE,names=c("PFTFAC","PCTPELL","UG25ABV","INC_PCT_LO","PAR_ED_PCT_1STGEN","FEMALE","UNEMP_RATE"))
+```
+
+
+##Methods
+#Variable Selection
+```{r}
+full <- lm(ADM_RATE ~NUMBRANCH+CONTROL+REGION+HBCU+PBI+TRIBAL+HSI+WOMENONLY+COSTT4_A+AVGFACSAL+PFTFAC+PCTPELL+UG25ABV+INC_PCT_LO+PAR_ED_PCT_1STGEN+FEMALE+MD_FAMINC+PCT_WHITE+PCT_BLACK+PCT_ASIAN+PCT_HISPANIC+PCT_BA+PCT_GRAD_PROF+PCT_BORN_US+POVERTY_RATE+UNEMP_RATE ,data=train)
+summary(full)
+
+vif(full)
+```
+
+```{r}
+#remove:INC_PCT_LO,PCT_WHITE,PCT_BLACK,PCT_HISPANIC,POVERTY_RATE(vif>10)
+full2<-lm(ADM_RATE ~NUMBRANCH+CONTROL+REGION+HBCU+PBI+TRIBAL+HSI+WOMENONLY+COSTT4_A+AVGFACSAL+PFTFAC+PCTPELL+UG25ABV+PAR_ED_PCT_1STGEN+FEMALE+MD_FAMINC+PCT_ASIAN+PCT_BA+PCT_GRAD_PROF+PCT_BORN_US,data=train)
+summary(full2)
+vif(full2)
+```
+
+```{r}
+#remove:PCT_GRAD_PROF,MD_FAMINC  Vif>5
+full3<-lm(ADM_RATE ~NUMBRANCH+CONTROL+REGION+HBCU+PBI+TRIBAL+HSI+WOMENONLY+COSTT4_A+AVGFACSAL+PFTFAC+PCTPELL+UG25ABV+PAR_ED_PCT_1STGEN+FEMALE+PCT_ASIAN+PCT_BA+PCT_BORN_US,data=train)
+summary(full3)
+vif(full3)
+```
+
+```{r}
+train1<-train[,c(1:14,16:17,21,23,25)]
+best <- regsubsets(ADM_RATE~., data=train1, nbest=1,nvmax = 30)
+summary(best)
+```
+
+```{r}
+select_criteria = function(model, n)
+{
+  SSres <- sum(model$residuals^2)
+  Rsq_adj <- summary(model)$adj.r.squared
+  p <- length(model$coefficients) - 1
+  AIC <- n*log(SSres/n) + 2*p
+  AICc <- AIC + (2*(p+2)*(p+3)/(n-p-1))
+  BIC <- n*log(SSres/n) + (p+2)*log(n)
+  res <- c(SSres, Rsq_adj, AIC, AICc, BIC)
+  names(res) <- c("SSres", "Rsq_adj", "AIC", "AIC_c", "BIC")
+  return(res)
+}
+n <- nrow(train) 
+results <- round(rbind(
+  select_criteria(lm(ADM_RATE~., data = train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE+PCT_ASIAN+CONTROL+WOMENONLY+HBCU+PBI, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE+PCT_ASIAN+CONTROL+WOMENONLY+HBCU, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE+PCT_ASIAN+CONTROL+WOMENONLY, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE+PCT_ASIAN+CONTROL, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE+PCT_ASIAN, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL+FEMALE, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+CONTROL+PFTFAC+PCT_BORN_US, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+COSTT4_A+PCTPELL, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL+CONTROL, data=train1), n),
+  select_criteria(lm(ADM_RATE~AVGFACSAL, data=train1), n),
+  select_criteria(lm(ADM_RATE ~ 1, data = train1), n)
+), digits = 2)
+
+rownames(results) <- c("18","17","16","15","14","13","12","11","10","9","8","7","6","5","4","3","2","1","0")
+results
+```
+
+```{r}
+#2 candidate model:
+mod_6<- lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH, data=train)
+mod_11<-lm(ADM_RATE~AVGFACSAL+COSTT4_A+PFTFAC+PCTPELL+PCT_BORN_US+NUMBRANCH+HSI+PAR_ED_PCT_1STGEN+PCT_BA+UG25ABV+TRIBAL, data=train)
+vif(mod_6)
+vif(mod_11)
+```
+
+```{r}
+stepwise_aic<-stepAIC(lm(ADM_RATE~.,data=train1), direction = "both",k=2)
+#same as mod_11
+```
+```{r}
+stepwise_bic <- stepAIC(lm(ADM_RATE~.,data=train1), direction = "both",k=log(nrow(train1)))
+#same as mod_6
+```
+
+```{r}
+summary(mod_6)
+summary(mod_11)
+```
+
+
+```{r}
+#check assumptions + condition1
+par(mfrow=c(3,3))
+plot(rstandard(mod_6) ~ fitted(mod_6), xlab="Fitted", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$AVGFACSAL, xlab="AVGFACSAL", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$COSTT4_A, xlab="COSTT4_A", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$PFTFAC, xlab="PFTFAC", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$PCTPELL, xlab="PCTPELL", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$PCT_BORN_US, xlab="PCT_BORN_US", ylab="Residuals")
+plot(rstandard(mod_6) ~ train$NUMBRANCH, xlab="NUMBRANCH", ylab="Residuals")
+plot(train$ADM_RATE ~ mod_6$fitted.values, xlab="Fitted Values", ylab="Admission Rate")
+abline(a = 0, b = 1, lty=2)
+lines(lowess(mod_6$fitted.values, train$ADM_RATE),col="red")
+qqnorm(rstandard(mod_6))
+qqline(rstandard(mod_6))
+
+```
+
+
+```{r}
+library(car)
+new_train <- train[,c(1,9:13,25)] 
+new_train$ADM_RATE <- new_train$ADM_RATE + 0.5
+str(new_train)
+multi_mod <- lm(cbind(ADM_RATE, AVGFACSAL, COSTT4_A,PFTFAC, PCTPELL,PCT_BORN_US,NUMBRANCH) ~ 1, data=new_train)
+bc <- powerTransform(multi_mod)
+summary(bc)
+```
+
+```{r}
+trans_mod_6 <- lm(I(ADM_RATE^2)~ I(sqrt(AVGFACSAL))+ I(sqrt(COSTT4_A))  + PFTFAC + I(sqrt(PCTPELL)) + I(PCT_BORN_US^9)+I(NUMBRANCH^(-6)),data=train)
+summary(trans_mod_6)
+```
+
+```{r}
+pairs(I(ADM_RATE^2)~ I(sqrt(AVGFACSAL))+ I(sqrt(COSTT4_A)) + PFTFAC + I(sqrt(PCTPELL)) + I(PCT_BORN_US^9)+I(NUMBRANCH^(-6)),data=train)
+```
+
+```{r}
+par(mfrow=c(3,3))
+plot(rstandard(trans_mod_6) ~ fitted(trans_mod_6), xlab="Fitted", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ I(sqrt(train$AVGFACSAL)), xlab="AVGFACSAL", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ I(sqrt(train$COSTT4_A)), xlab="COSTT4_A", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ train$PFTFAC, xlab="PFTFAC", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ I(sqrt(train$PCTPELL)), xlab="PCTPELL", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ I(train$PCT_BORN_US^9), xlab="PCT_BORN_US", ylab="Residuals")
+plot(rstandard(trans_mod_6) ~ I(train$NUMBRANCH^(-6)), xlab="NUMBRANCH", ylab="Residuals")
+plot(train$ADM_RATE ~ trans_mod_6$fitted.values, xlab="Fitted Values", ylab="Admission Rate")
+abline(a = 0, b = 1, lty=2)
+lines(lowess(trans_mod_6$fitted.values, train$ADM_RATE),col="red")
+qqnorm(rstandard(trans_mod_6))
+qqline(rstandard(trans_mod_6))
+```
+
+
+```{r}
+#leverage point:50
+h<-hatvalues(trans_mod_6)
+threshold<-2*(length(trans_mod_6$coefficients)/nrow(train))
+w<- which(h>threshold)
+#train[w,]
+
+#none
+D<-cooks.distance(trans_mod_6)
+cutoff<-qf(0.5,7,747)
+#which(D>cutoff)
+
+#54 obs.are influential on their own fitted values
+fits<-dffits(trans_mod_6)
+cutoff2<-2*sqrt(7/754)
+#which(abs(fits)>cutoff2)
+
+#53 obs. affect AVGFACSAL coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff3<-2/sqrt(754)
+#which(abs(dfb[,1])>cutoff3)
+
+#55 obs. affect COSTT4_A coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff4<-2/sqrt(754)
+#which(abs(dfb[,2])>cutoff4)
+
+#43 obs. affect PFTFAC coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff5<-2/sqrt(754)
+#which(abs(dfb[,3])>cutoff5)
+
+#54 obs. affect PCTPELL coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff6<-2/sqrt(754)
+#which(abs(dfb[,4])>cutoff6)
+
+#50 obs. affect PCT_BORN_US coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff7<-2/sqrt(754)
+#which(abs(dfb[,5])>cutoff7)
+
+#65 obs. affect NUMBRANCH coefficient
+dfb<-dfbetas(trans_mod_6)
+cutoff8<-2/sqrt(754)
+#which(abs(dfb[,6])>cutoff7)
+
+#77 outliers
+r<-rstandard(trans_mod_6)
+#r[which(h>12/nrow(train))]
+```
+
+
+```{r}
+#model validation:Prediction
+pred.y<- predict(trans_mod_6, newdata=test,type="response")
+mean((test$ADM_RATE - pred.y)^2)
+
+summary(lm(I(ADM_RATE^2)~ I(sqrt(AVGFACSAL))+ I(sqrt(COSTT4_A))  + PFTFAC + I(sqrt(PCTPELL)) + I(PCT_BORN_US^9)+I(NUMBRANCH^(-6)),data=test))
+```
+
